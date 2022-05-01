@@ -5,13 +5,14 @@
 #include <ostream>
 #include <iomanip>
 #include <cstdio>
+#include <chrono>
 
 namespace profiler {
 
 class single_profiler;
 
 class profiler {
-	std::vector<const single_profiler *> profs;
+	std::vector<single_profiler *> profs;
 	int indent;
 	profiler() { }
 	const std::string format_time(double v) const {
@@ -31,7 +32,8 @@ public:
 		static profiler instance;
 		return instance;
 	}
-	void reg(const single_profiler *prof) {
+	void clear();
+	void reg(single_profiler *prof) {
 		profs.push_back(prof);
 	}
 	int enter() { return indent++; }
@@ -47,20 +49,20 @@ inline const profiler &getInstance() {
 }
 
 class single_profiler {
-	timespec startmark;
+	std::chrono::time_point<std::chrono::high_resolution_clock> startmark;
 	int _calls;
 	double tottime;
 	int depth;
 	int indent;
 	void start() {
-		clock_gettime(CLOCK_MONOTONIC_RAW, &startmark);
+		startmark = std::chrono::high_resolution_clock::now();
 	}
 	double stop() {
-		timespec stopmark;
-		clock_gettime(CLOCK_MONOTONIC_RAW, &stopmark);
-		int nsec = stopmark.tv_nsec - startmark.tv_nsec;
-		int sec = stopmark.tv_sec - startmark.tv_sec;
-		return sec + 1e-9 * nsec;
+		std::chrono::time_point<std::chrono::high_resolution_clock> stopmark;
+		stopmark = std::chrono::high_resolution_clock::now();
+		auto start = std::chrono::time_point_cast<std::chrono::nanoseconds>(startmark).time_since_epoch().count();
+		auto stop = std::chrono::time_point_cast<std::chrono::nanoseconds>(stopmark).time_since_epoch().count();
+		return 1e-9 * (stop - start);
 	}
 	const std::string _filename;
 	const std::string _pretty_function;
@@ -89,12 +91,22 @@ public:
 		else
 			profiler::getInstance().leave();
 	}
+	void clear(){
+		_calls = 0;
+		tottime = 0;
+		depth = 0;
+	}
 	const std::string &filename() const { return _filename; }
 	int line_number() const { return _line_number; }
 	const std::string function() const { return std::string(indent, ' ') + _pretty_function; }
 	int calls() const { return _calls; }
 	double total_time() const { return tottime; }
 };
+
+inline void profiler::clear(){
+	for (auto& p : profs)
+		p->clear();
+}
 
 template<typename T>
 void profile_gate(const char *fn, const int line, const char *func, bool enter, T *) {
@@ -123,7 +135,7 @@ inline std::ostream &operator<<(std::ostream &o, const profiler &prof) {
 
 }
 
-#define PROFILE_ME_AS(name) \
+#define PROFILE_AS(name) \
 	struct __prof_data { bool early_exit; \
 		__prof_data(const char *fn, const int line, const char *func) { \
 			early_exit = false; \
@@ -138,6 +150,8 @@ inline std::ostream &operator<<(std::ostream &o, const profiler &prof) {
 				stop(); \
 		} \
 	} __helper_var(__FILE__, __LINE__, name)
-#define PROFILE_ME PROFILE_ME_AS(__PRETTY_FUNCTION__)
+#define PROFILE PROFILE_AS(__FUNCTION__)
+#define PROFILE_SIG PROFILE_AS(__PRETTY_FUNCTION__)
 #define PROFILE_END \
 	__helper_var.stop()
+
