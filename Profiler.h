@@ -7,6 +7,10 @@
 #include <cstdio>
 #include <chrono>
 
+#include <string.h>
+
+#define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
+
 namespace profiler {
 
 class single_profiler;
@@ -121,7 +125,7 @@ inline std::ostream &profiler::print(std::ostream &o, int fnwidth) const {
 	o << "\n" << std::left << std::setw(fnwidth) << "function";
 	o << "line	calls	   tottime	avgtime\n\n";
 	for (const single_profiler *p : profs) {
-		o << std::left << std::setfill('.') << std::setw(fnwidth) << p->function() << std::setfill(' ')
+		o << std::left << std::setfill('.') << std::setw(fnwidth) << (p->function() + ":" + p->filename()) << std::setfill(' ')
 			<< " " << std::setw(8) << p->line_number()
 			<< " " << std::setw(8) << p->calls() << " "
 			<< format_time(p->total_time()) << " " << format_time(p->total_time() / p->calls()) << "\n";
@@ -149,7 +153,7 @@ inline std::ostream &operator<<(std::ostream &o, const profiler &prof) {
 			if (!early_exit) \
 				stop(); \
 		} \
-	} __helper_var(__FILE__, __LINE__, name)
+	} __helper_var(__FILENAME__, __LINE__, name)
 #define PROFILE PROFILE_AS(__FUNCTION__)
 #define PROFILE_SIG PROFILE_AS(__PRETTY_FUNCTION__)
 #define PROFILE_END \
